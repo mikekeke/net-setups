@@ -3,8 +3,8 @@ testnet-bpi-setup/data/chain-index/db
 testnet-bpi-setup/data/scripts
 testnet-bpi-setup/data/txs
 testnet-bpi-setup/socket
-testnet-bpi-setup/binaries/*
 
+testnet-bpi-setup/binaries/*
 !testnet-bpi-setup/binaries/cardano-cli
 !testnet-bpi-setup/binaries/plutus-chain-index
 !testnet-bpi-setup/binaries/cardano-node

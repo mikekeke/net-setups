@@ -5,8 +5,8 @@
   },
   "cicPort": 9083,
   "cicSecurityParam": 2160,
-  "cicSocketPath": "/home/mike/dev/mlabs/testnet-bpi-setup/socket/node.socket",
-  "cicDbPath": "/home/mike/dev/mlabs/testnet-bpi-setup/data/chain-index/db/chain-index.sqlite",
+  "cicSocketPath": "/home/mike/dev/mlabs/net-setups/testnet-bpi-setup/socket/node.socket",
+  "cicDbPath": "/home/mike/dev/mlabs/net-setups/testnet-bpi-setup/data/chain-index/db/chain-index.sqlite",
   "cicNetworkId": {
     "contents": {
       "unNetworkMagic": 1097911063

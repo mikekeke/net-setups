@@ -1,8 +1,8 @@
 testnet-bpi-setup/data/node/db
-testnet-bpi-setup/data/chain-index/db
-testnet-bpi-setup/data/scripts
-testnet-bpi-setup/data/txs
-testnet-bpi-setup/socket
+testnet-bpi-setup/chain-index/db
+testnet-bpi-setup/bpi/scripts
+testnet-bpi-setup/bpi/txs
+testnet-bpi-setup/node/db
 
 testnet-bpi-setup/binaries/*
 !testnet-bpi-setup/binaries/cardano-cli

@@ -2,7 +2,7 @@
 
 export PATH="/home/mike/dev/iog/binaries:$PATH"
 plutus-chain-index \
-  --config "$PWD"/data/chain-index/config.json \
+  --config "$PWD"/chain-index/config.json \
   start-index
 
 # plutus-chain-index \

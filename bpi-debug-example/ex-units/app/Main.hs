@@ -1,7 +1,6 @@
 module Main (main) where
 
-import PlutipRun qualified as Plutip
-import TestnetRun qualified as Testnet
+import TestRun qualified as TestRun
 import Prelude
 
 {- | For running fast live tests using Plutip's local cluster,
@@ -9,5 +8,4 @@ import Prelude
 -}
 main :: IO ()
 main = do
-  -- Plutip.plutipRun
-  Testnet.testnetRun
+  TestRun.testnetRun

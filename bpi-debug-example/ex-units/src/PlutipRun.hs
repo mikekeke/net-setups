@@ -8,15 +8,13 @@ import Cardano.Api.Shelley (ProtocolParameters)
 import Control.Concurrent.STM (newTVarIO, readTVarIO)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as JSON
-import Data.Default (def)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.UUID.V4 qualified as UUID
-import Ledger (POSIXTime (POSIXTime), PubKeyHash)
+import Ledger (PubKeyHash)
 import TimeDebugContract qualified
 
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
-import Ledger.TimeSlot (SlotConfig (scSlotZeroTime))
 import Plutus.PAB.Core.ContractInstance.STM (Activity (Active))
 import Servant.Client (BaseUrl (BaseUrl), Scheme (Http))
 import System.Directory (listDirectory)
@@ -49,6 +47,7 @@ mkContractEnv nodeInfo clusterDir = do
   contractInstanceID <- ContractInstanceId <$> UUID.nextRandom
   contractState <- newTVarIO (ContractState Active mempty)
   contractStats <- newTVarIO (ContractStats mempty)
+  contractLogs <- newTVarIO (LogsList mempty)
   pkhs <- getPkhs clusterDir
   return $
     ContractEnvironment
@@ -56,6 +55,7 @@ mkContractEnv nodeInfo clusterDir = do
       , ceContractState = contractState
       , ceContractInstanceId = contractInstanceID
       , ceContractStats = contractStats
+      , ceContractLogs = contractLogs
       }
 
 getPparams :: BPI.NodeInfo -> FilePath -> IO (ProtocolParameters, FilePath)
@@ -74,7 +74,6 @@ mkPabConf pparams pparamsFile clusterDir ownPkh =
     , pcPort = 9080
     , pcProtocolParams = pparams
     , pcTipPollingInterval = 1_000_000
-    , -- , pcSlotConfig = def {scSlotZeroTime = POSIXTime $ 1652956123 * 1000}
       pcOwnPubKeyHash = ownPkh
     , pcOwnStakePubKeyHash = Nothing
     , pcScriptFileDir = Text.pack $ clusterDir </> "bot-plutus-interface/scripts"
@@ -85,7 +84,10 @@ mkPabConf pparams pparamsFile clusterDir ownPkh =
     , pcProtocolParamsFile = pparamsFile
     , pcEnableTxEndpoint = True
     , pcCollectStats = True
+    , pcCollectLogs = False
+    , pcBudgetMultiplier = 1
     , pcMetadataDir = Text.pack $ clusterDir </> "bot-plutus-interface/metadata"
+    , pcTxStatusPolling = TxStatusPolling 1_000 8
     }
 
 getPkhs :: FilePath -> IO [PubKeyHash]

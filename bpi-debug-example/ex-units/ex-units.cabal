@@ -76,8 +76,7 @@ library
   import:          common-lang
   exposed-modules: 
     TimeDebugContract
-    PlutipRun
-    TestnetRun
+    TestRun
 
   build-depends:
       plutus-ledger
@@ -102,8 +101,7 @@ library
     , stm
     , plutus-pab
     , plutus-contract
-
-
+    , random
 
   hs-source-dirs:  src
 

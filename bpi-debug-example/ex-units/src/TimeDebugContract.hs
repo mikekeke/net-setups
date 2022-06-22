@@ -3,6 +3,8 @@ module TimeDebugContract
     timeDebugLight,
     splitUtxo,
     lockAtScript,
+    timeDebugViaPay,
+    lockUnlock,
   )
 where
 
@@ -32,7 +34,7 @@ import Ledger
   )
 import Ledger.Constraints qualified as Constraints
 import Ledger.Typed.Scripts.Validators qualified as Validators
-import Plutus.Contract (Contract, submitTx, submitTxConstraintsWith)
+import Plutus.Contract (Contract, submitTx, submitTxConstraintsWith, waitNSlots)
 import Plutus.Contract qualified as Contract
 import Plutus.PAB.Effects.Contract.Builtin (EmptySchema)
 import Plutus.V1.Ledger.Ada (adaValueOf)
@@ -63,6 +65,9 @@ mkValidator _ !timeRmr !ctx =
     && upperBoundsSame
     && rangesAreSame
     && boundsTimesCheck
+    -- && ctxUpperIsBigger
+    -- && ctxUpperIsSmaller
+    -- && ctxUpperIsEqual
   where
     info = scriptContextTxInfo ctx
     vRange = txInfoValidRange info
@@ -93,6 +98,22 @@ mkValidator _ !timeRmr !ctx =
       traceIfFalse "Ranges not equal" $
         vRange == rmrRange
 
+    -- ctxUpperIsBigger = 
+    --   traceIfTrue 
+    --   "Ctx upper is bigger"
+    --   (ctxUb > rmrUb)
+
+    -- ctxUpperIsSmaller = 
+    --   traceIfTrue 
+    --   "Ctx upper is smaller"
+    --   (ctxUb < rmrUb)
+
+    -- ctxUpperIsEqual = 
+    --   traceIfTrue 
+    --   "Ctx upper is equal"
+    --   (ctxUb == rmrUb)
+
+
     boundsTimesCheck =
       -- True
       traceIfFalse "Bounds times check failed" $
@@ -119,6 +140,21 @@ validatorAddr :: Address
 validatorAddr = scriptAddress validator
 
 ------------------------------------------
+timeDebugViaPay :: Hask.Integer -> Contract () EmptySchema Text Hask.String
+timeDebugViaPay vInterval = do
+  ownPkh <- Contract.ownPaymentPubKeyHash
+  startTime <- Contract.currentTime
+  let endTime = startTime + (POSIXTime vInterval)
+      validInterval = Interval (lowerBound startTime) (strictUpperBound endTime)
+  let constr =
+        Constraints.mustPayToPubKey ownPkh (Value.adaValueOf 4)
+          <> Constraints.mustValidateIn validInterval
+  tx <- submitTx constr
+  -- Contract.awaitTxConfirmed $ getCardanoTxId tx
+  _ <- Contract.awaitTxStatusChange $ getCardanoTxId tx
+  pure "Time debug done"
+
+
 timeDebugLight :: Contract () EmptySchema Text Hask.String
 timeDebugLight = do
   startTime <- Contract.currentTime
@@ -157,7 +193,8 @@ unlockWithTimeCheck = do
 
   utxos <- Map.toList <$> Contract.utxosAt validatorAddr
   case utxos of
-    [(oref, _)] -> do
+    -- [(oref, _)] -> do
+    (oref, _) : _ -> do
       -- let rmrInterval = interval startTime endTime
       let rmrInterval = Interval (lowerBound startTime) (strictUpperBound endTime)
           rmr' = TimeRedeemer startTime endTime rmrInterval
@@ -175,7 +212,7 @@ unlockWithTimeCheck = do
                 Constraints.unspentOutputs (Map.fromList utxos)
               ]
       !tx <- submitTxConstraintsWith @TestTime lkps txc
-      -- Contract.awaitTxConfirmed (getCardanoTxId tx)
+      Contract.awaitTxConfirmed (getCardanoTxId tx)
       utxosAfterSpent <- Map.toList <$> Contract.utxosAt validatorAddr
       pure (Hask.show utxosAfterSpent)
     rest -> Contract.throwError $ "Unlocking error: Unwanted set of utxos: " Hask.<> Text.pack (Hask.show rest)
@@ -190,5 +227,11 @@ lockAtScript = do
           unitDatum
           (Value.adaValueOf 10)
   !tx <- submitTx constr
-  -- Contract.awaitTxConfirmed $ getCardanoTxId tx
+  Contract.awaitTxConfirmed $ getCardanoTxId tx
   pure "Lock done"
+
+lockUnlock :: Contract () EmptySchema Text Hask.String
+lockUnlock = 
+  lockAtScript 
+  -- >> waitNSlots 1
+  >> unlockWithTimeCheck

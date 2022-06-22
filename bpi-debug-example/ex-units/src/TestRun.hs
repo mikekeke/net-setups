@@ -1,8 +1,8 @@
-module TestnetRun (testnetRun) where
+module TestRun (testnetRun) where
 
 import BotPlutusInterface.Contract qualified as BPI
 import BotPlutusInterface.Types
-import Cardano.Api (NetworkId (Testnet), NetworkMagic (NetworkMagic))
+import Cardano.Api (NetworkId (Testnet, Mainnet), NetworkMagic (NetworkMagic))
 import Cardano.Api.Shelley (ProtocolParameters)
 import Control.Concurrent.STM (newTVarIO, readTVarIO)
 import Data.Aeson (decodeFileStrict, (.=))
@@ -20,64 +20,93 @@ import System.FilePath ((</>))
 import TimeDebugContract qualified
 import Wallet.Types (ContractInstanceId (ContractInstanceId))
 import Prelude
+import Control.Monad (void)
+import System.Random (newStdGen, Random (randomR), randomRIO)
+import Control.Concurrent (threadDelay)
 
 testnetRun :: IO ()
 testnetRun = do
   setLocaleEncoding utf8
-  [bpiDir, cliDir, sockPath, operation] <- getArgs -- /home/mike/dev/mlabs/net-setups/testnet-bpi-setup/data
+  [bpiDir, cliDir, sockPath, netMagic, operation] <- getArgs -- /home/mike/dev/mlabs/net-setups/testnet-bpi-setup/data
   setEnv "CARDANO_NODE_SOCKET_PATH" sockPath
   getEnv "PATH" >>= \p -> setEnv "PATH" (p ++ ":" ++ cliDir)
 
-  cEnv <- mkContractEnv bpiDir
+  let netMagic' = read netMagic
+
+  cEnv <- mkContractEnv netMagic' bpiDir
 
   putStrLn "Running contract"
-  res <- case operation of
-    "light" -> do
-      putStrLn "Running loght debug"
-      BPI.runContract cEnv TimeDebugContract.timeDebugLight
-    "split" -> do
-      putStrLn "Splitting whatever first utxo"
-      fmap show <$> BPI.runContract cEnv TimeDebugContract.splitUtxo
-    "lock" -> do
-      putStrLn "Locking"
-      BPI.runContract cEnv TimeDebugContract.lockAtScript
-    "unlock" -> do
-      putStrLn "Spending"
-      BPI.runContract cEnv TimeDebugContract.unlockWithTimeCheck
-    "viaPay" -> do
-      putStrLn "Debug range validation and mempool. Specify interval:"
-      int <- read <$> getLine
-      BPI.runContract cEnv (TimeDebugContract.timeDebugViaPay int)
-    other -> error $ "Unsupported operation: " ++ other
-
-  putStrLn $ case res of
-    Right r -> "=== OK ===\n" ++ show r
-    Left e -> "=== FAILED ===\n" ++ show e
+  
 
   stats <- readTVarIO (ceContractStats cEnv)
   putStrLn $ "=== Stats ===\n" ++ show stats
+  void $ runMyContract cEnv operation
 
-mkContractEnv :: Monoid w => FilePath -> IO (ContractEnvironment w)
-mkContractEnv bpiDir = do
+  where
+    runMyContract cEnv operation  = do
+      res <- case operation of
+        "light" -> do
+          putStrLn "Running loght debug"
+          BPI.runContract cEnv TimeDebugContract.timeDebugLight
+        "split" -> do
+          putStrLn "Splitting whatever first utxo"
+          fmap show <$> BPI.runContract cEnv TimeDebugContract.splitUtxo
+        "lock" -> do
+          putStrLn "Locking"
+          BPI.runContract cEnv TimeDebugContract.lockAtScript
+        "unlock" -> do
+          putStrLn "Spending"
+          BPI.runContract cEnv TimeDebugContract.unlockWithTimeCheck
+        "lock-unlock" -> do
+          putStrLn "Lock -> Unlock"
+          BPI.runContract cEnv TimeDebugContract.lockUnlock
+        "viaPay" -> do
+          putStrLn "Debug range validation and mempool. Specify interval:"
+          int <- read <$> getLine
+          BPI.runContract cEnv (TimeDebugContract.timeDebugViaPay int)
+        other -> error $ "Unsupported operation: " ++ other
+
+      case res of
+        -- Right r -> "=== OK ===\n" ++ show r >> runMyContract
+        Right r -> do
+          putStrLn ("=== OK ===\n" ++ show r)
+          randomDelay
+          runMyContract cEnv operation
+        Left e -> putStrLn ("=== FAILED ===\n" ++ show e) >> return (show e)
+
+    randomDelay :: IO ()
+    randomDelay = do
+        g <- newStdGen
+        let (t,_) = randomR  (0, 2_000_000) g
+        putStrLn $ "delay: " ++ show t
+        threadDelay t
+
+type NetMagic = Integer -- 0 fot mainnet, 1097911063 public testnet
+
+mkContractEnv :: Monoid w => NetMagic -> FilePath -> IO (ContractEnvironment w)
+mkContractEnv netMagic bpiDir = do
   let paramsFile = bpiDir </> "pparams.json"
   Just pparams <- decodeFileStrict paramsFile
   contractInstanceID <- ContractInstanceId <$> UUID.nextRandom
   contractState <- newTVarIO (ContractState Active mempty)
   contractStats <- newTVarIO (ContractStats mempty)
+  contractLogs <- newTVarIO (LogsList mempty)
   pkhs <- getPkhs bpiDir
   return $
     ContractEnvironment
-      { cePABConfig = mkPabConf pparams (Text.pack paramsFile) bpiDir (head pkhs)
+      { cePABConfig = mkPabConf netMagic pparams (Text.pack paramsFile) bpiDir (head pkhs)
       , ceContractState = contractState
       , ceContractInstanceId = contractInstanceID
       , ceContractStats = contractStats
+      , ceContractLogs = contractLogs
       }
 
-mkPabConf :: ProtocolParameters -> Text -> FilePath -> PubKeyHash -> PABConfig
-mkPabConf pparams pparamsFile bpiDir ownPkh =
+
+mkPabConf :: NetMagic -> ProtocolParameters -> Text -> FilePath -> PubKeyHash -> PABConfig
+mkPabConf netMagic pparams pparamsFile bpiDir ownPkh =
   PABConfig
     { pcCliLocation = Local
-    , pcNetwork = Testnet (NetworkMagic 1097911063)
+    , pcNetwork = netId
     , pcChainIndexUrl = BaseUrl Http "localhost" 9083 ""
     , pcPort = 9080
     , pcProtocolParams = pparams
@@ -88,15 +117,19 @@ mkPabConf pparams pparamsFile bpiDir ownPkh =
     , pcSigningKeyFileDir = Text.pack $ bpiDir </> "signing-keys"
     , pcTxFileDir = Text.pack $ bpiDir </> "txs"
     , pcDryRun = False
-    , pcLogLevel = Debug
+    , pcLogLevel = Notice
     , pcProtocolParamsFile = pparamsFile
     , pcEnableTxEndpoint = False
     , pcCollectStats = False
     , pcCollectLogs = False
     , pcBudgetMultiplier = 1
     , pcMetadataDir = Text.pack $ bpiDir </> "metadata"
-    , pcTxStatusPolling = TxStatusPolling 1_000_000 5
+    , pcTxStatusPolling = TxStatusPolling 500_000 5
     }
+  where
+    netId = case netMagic of
+      0 -> Mainnet
+      other -> Testnet . NetworkMagic . fromInteger $ other
 
 getPkhs :: FilePath -> IO [PubKeyHash]
 getPkhs bpiDir = do

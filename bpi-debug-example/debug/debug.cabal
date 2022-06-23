@@ -1,5 +1,5 @@
 cabal-version:      3.0
-name:               ex-units
+name:               debug
 version:            0.1.0.0
 synopsis:           NFT example
 description:        NFT example running on the fake pab
@@ -75,8 +75,10 @@ common common-lang
 library
   import:          common-lang
   exposed-modules: 
+    SomeDebugContract
     TimeDebugContract
     TestRun
+    Tools
 
   build-depends:
       plutus-ledger
@@ -105,10 +107,10 @@ library
 
   hs-source-dirs:  src
 
-executable ex-units-run
+executable debug-run
   import:         common-lang
   build-depends:
-    ex-units
+    debug
 
 
   main-is:        Main.hs

@@ -2,9 +2,11 @@ module TestRun (testnetRun) where
 
 import BotPlutusInterface.Contract qualified as BPI
 import BotPlutusInterface.Types
-import Cardano.Api (NetworkId (Testnet, Mainnet), NetworkMagic (NetworkMagic))
+import Cardano.Api (NetworkId (Mainnet, Testnet), NetworkMagic (NetworkMagic))
 import Cardano.Api.Shelley (ProtocolParameters)
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (newTVarIO, readTVarIO)
+import Control.Monad (void)
 import Data.Aeson (decodeFileStrict, (.=))
 import Data.Aeson qualified as JSON
 import Data.Text (Text)
@@ -17,12 +19,11 @@ import Servant.Client (BaseUrl (BaseUrl), Scheme (Http))
 import System.Directory (listDirectory)
 import System.Environment (getArgs, getEnv, setEnv)
 import System.FilePath ((</>))
+import System.Random (Random (randomR), newStdGen, randomRIO)
 import TimeDebugContract qualified
+import Tools
 import Wallet.Types (ContractInstanceId (ContractInstanceId))
 import Prelude
-import Control.Monad (void)
-import System.Random (newStdGen, Random (randomR), randomRIO)
-import Control.Concurrent (threadDelay)
 
 testnetRun :: IO ()
 testnetRun = do
@@ -36,14 +37,12 @@ testnetRun = do
   cEnv <- mkContractEnv netMagic' bpiDir
 
   putStrLn "Running contract"
-  
 
   stats <- readTVarIO (ceContractStats cEnv)
   putStrLn $ "=== Stats ===\n" ++ show stats
   void $ runMyContract cEnv operation
-
   where
-    runMyContract cEnv operation  = do
+    runMyContract cEnv operation = do
       res <- case operation of
         "light" -> do
           putStrLn "Running loght debug"
@@ -76,10 +75,10 @@ testnetRun = do
 
     randomDelay :: IO ()
     randomDelay = do
-        g <- newStdGen
-        let (t,_) = randomR  (0, 2_000_000) g
-        putStrLn $ "delay: " ++ show t
-        threadDelay t
+      g <- newStdGen
+      let (t, _) = randomR (0, 2_000_000) g
+      putStrLn $ "delay: " ++ show t
+      threadDelay t
 
 type NetMagic = Integer -- 0 fot mainnet, 1097911063 public testnet
 
@@ -100,7 +99,6 @@ mkContractEnv netMagic bpiDir = do
       , ceContractStats = contractStats
       , ceContractLogs = contractLogs
       }
-
 
 mkPabConf :: NetMagic -> ProtocolParameters -> Text -> FilePath -> PubKeyHash -> PABConfig
 mkPabConf netMagic pparams pparamsFile bpiDir ownPkh =
@@ -140,14 +138,7 @@ getPkhs bpiDir = do
           . Text.replace ".skey" ""
           . Text.pack
   keyNames <- listDirectory dir
-  return $ map (parseKey . replace) keyNames
-  where
-    parseKey :: String -> PubKeyHash
-    parseKey key =
-      let res = JSON.fromJSON $ JSON.object ["getPubKeyHash" .= key]
-       in case res of
-            JSON.Success pkh -> pkh
-            _ -> error "failed to parse pkh"
+  return $ map (pkhFromHash . replace) keyNames
 
 -- getOrFail :: Show e => Either e a -> a
 -- getOrFail = either (error . show) id
